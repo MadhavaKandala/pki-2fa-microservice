@@ -20,10 +20,10 @@ def get_commit_hash():
         print("Error: Could not get commit hash. Make sure you're in a git repository.")
         return None
 
-def sign_commit_hash(commit_hash):
-    """Sign the commit hash using RSA-PSS with SHA-256"""
+def sign_and_encrypt_commit_hash(commit_hash):
+    """Sign the commit hash using RSA-PSS with SHA-256 and encrypt with instructor's public key"""
     try:
-        # Read the private key
+        # Read the student's private key
         with open('student_private.pem', 'rb') as f:
             private_key = serialization.load_pem_private_key(f.read(), password=None, backend=None)
         
@@ -37,19 +37,33 @@ def sign_commit_hash(commit_hash):
             hashes.SHA256()
         )
         
-        # Encode signature as base64
-        encoded_signature = base64.b64encode(signature).decode('utf-8')
+        # Read the instructor's public key
+        with open('instructor_public.pem', 'rb') as f:
+            instructor_public_key = serialization.load_pem_public_key(f.read(), backend=None)
+        
+        # Encrypt the signature with instructor's public key using OAEP
+        encrypted_signature = instructor_public_key.encrypt(
+            signature,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        
+        # Encode encrypted signature as base64
+        encoded_signature = base64.b64encode(encrypted_signature).decode('utf-8')
         return encoded_signature
-    except FileNotFoundError:
-        print("Error: student_private.pem not found")
+    except FileNotFoundError as e:
+        print(f"Error: {e} not found")
         return None
     except Exception as e:
-        print(f"Error signing commit hash: {e}")
+        print(f"Error signing and encrypting commit hash: {e}")
         return None
 
 def verify_submission_files():
     """Verify that all required files exist"""
-    required_files = ['student_public.pem', 'encrypted_seed.txt']
+    required_files = ['student_public.pem', 'encrypted_seed.txt', 'instructor_public.pem']
     missing_files = []
     
     for file in required_files:
@@ -66,7 +80,7 @@ def main():
     missing = verify_submission_files()
     if missing:
         print(f"[X] Error: Missing files: {', '.join(missing)}")
-        print("    Please ensure you have completed STEP 1 (request_seed.py)")
+        print(" Please ensure you have completed STEP 1 (request_seed.py)")
         return False
     
     print("[+] All required files found")
@@ -81,14 +95,14 @@ def main():
     print(f"[+] Current commit hash: {commit_hash}")
     print()
     
-    # Sign the commit hash
+    # Sign and encrypt the commit hash
     print("[*] Signing commit hash with RSA-PSS (SHA-256)...")
-    encrypted_signature = sign_commit_hash(commit_hash)
+    encrypted_signature = sign_and_encrypt_commit_hash(commit_hash)
     if not encrypted_signature:
-        print("[X] Error: Could not sign commit hash")
+        print("[X] Error: Could not sign and encrypt commit hash")
         return False
     
-    print(f"[+] Signature generated successfully")
+    print(f"[+] Signature generated and encrypted successfully")
     print()
     
     # Read student public key
@@ -101,7 +115,7 @@ def main():
     # Read encrypted seed
     print("[*] Reading encrypted seed...")
     with open('encrypted_seed.txt', 'r') as f:
-        encrypted_seed = f.read()
+        encrypted_seed = f.read().strip()
     print("[+] Encrypted seed loaded")
     print()
     
@@ -111,15 +125,15 @@ def main():
     print()
     
     print("1. GitHub Repository URL:")
-    print("   https://github.com/MadhavaKandala/pki-2fa-microservice")
+    print(" https://github.com/MadhavaKandala/pki-2fa-microservice")
     print()
     
     print("2. Commit Hash:")
-    print(f"   {commit_hash}")
+    print(f" {commit_hash}")
     print()
     
     print("3. Encrypted Commit Signature:")
-    print(f"   {encrypted_signature}")
+    print(f" {encrypted_signature}")
     print()
     
     print("4. Student Public Key:")
