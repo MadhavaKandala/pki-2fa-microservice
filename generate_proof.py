@@ -5,6 +5,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import serialization
 import json
+import sys
 
 def get_commit_hash():
     """Get the current commit hash from git"""
@@ -28,6 +29,7 @@ def sign_and_encrypt_commit_hash(commit_hash):
             private_key = serialization.load_pem_private_key(f.read(), password=None, backend=None)
         
         # Sign the commit hash using RSA-PSS with SHA-256
+        # CRITICAL: Sign the ASCII bytes of the hash string
         signature = private_key.sign(
             commit_hash.encode('utf-8'),
             padding.PSS(
@@ -51,8 +53,8 @@ def sign_and_encrypt_commit_hash(commit_hash):
             )
         )
         
-        # Encode encrypted signature as base64
-        encoded_signature = base64.b64encode(encrypted_signature).decode('utf-8')
+        # Encode encrypted signature as base64 and ensure single line
+        encoded_signature = base64.b64encode(encrypted_signature).decode('utf-8').replace('\n', '').strip()
         return encoded_signature
     except FileNotFoundError as e:
         print(f"Error: {e} not found")
@@ -61,68 +63,38 @@ def sign_and_encrypt_commit_hash(commit_hash):
         print(f"Error signing and encrypting commit hash: {e}")
         return None
 
-def verify_submission_files():
-    """Verify that all required files exist"""
-    required_files = ['student_public.pem', 'encrypted_seed.txt', 'instructor_public.pem']
-    missing_files = []
-    
-    for file in required_files:
-        if not Path(file).exists():
-            missing_files.append(file)
-    
-    return missing_files
-
 def main():
     print("[*] Generating submission proof...")
-    print()
-    
-    # Check for required files
-    missing = verify_submission_files()
-    if missing:
-        print(f"[X] Error: Missing files: {', '.join(missing)}")
-        print(" Please ensure you have completed STEP 1 (request_seed.py)")
-        return False
-    
-    print("[+] All required files found")
-    print()
     
     # Get commit hash
     commit_hash = get_commit_hash()
     if not commit_hash:
-        print("[X] Error: Could not get commit hash")
         return False
     
     print(f"[+] Current commit hash: {commit_hash}")
-    print()
     
-    # Sign and encrypt the commit hash
-    print("[*] Signing commit hash with RSA-PSS (SHA-256)...")
+    # Sign and encrypt
     encrypted_signature = sign_and_encrypt_commit_hash(commit_hash)
     if not encrypted_signature:
-        print("[X] Error: Could not sign and encrypt commit hash")
         return False
     
-    print(f"[+] Signature generated and encrypted successfully")
-    print()
+    print(f"[+] Signature generated.")
     
-    # Read student public key
-    print("[*] Reading student public key...")
-    with open('student_public.pem', 'r') as f:
-        student_public_key = f.read()
-    print("[+] Student public key loaded")
-    print()
-    
-    # Read encrypted seed
-    print("[*] Reading encrypted seed...")
-    with open('encrypted_seed.txt', 'r') as f:
-        encrypted_seed = f.read().strip()
-    print("[+] Encrypted seed loaded")
-    print()
-    
+    # Read other files
+    try:
+        with open('student_public.pem', 'r') as f:
+            student_public_key = f.read().replace('\r\n', '\n')
+            # Ensure proper PEM formatting
+        
+        with open('encrypted_seed.txt', 'r') as f:
+            encrypted_seed = f.read().strip().replace('\n', '')
+    except Exception as e:
+        print(f"Error reading files: {e}")
+        return False
+
     print("=" * 70)
-    print("SUBMISSION DATA - Copy these values to Partnr")
+    print("SUBMISSION DATA")
     print("=" * 70)
-    print()
     
     print("1. GitHub Repository URL:")
     print(" https://github.com/MadhavaKandala/pki-2fa-microservice")
@@ -143,9 +115,6 @@ def main():
     print("5. Encrypted Seed:")
     print(encrypted_seed)
     print()
-    
-    print("=" * 70)
-    print("All data is ready for submission on Partnr!")
     print("=" * 70)
     
     return True

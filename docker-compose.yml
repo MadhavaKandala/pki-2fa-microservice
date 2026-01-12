@@ -1,12 +1,16 @@
+version: '3.8'
+
 services:
   app:
     build: .
-    container_name: pki-2fa-api
     ports:
       - "8080:8080"
     volumes:
       - seed-data:/data
       - cron-output:/cron
+      # Mount keys for local dev verification if needed, but they are COPY'd in Dockerfile
+      # Keeping them here ensures if I change them locally, container sees them without rebuild 
+      # (though rebuild is recommended)
       - ./student_private.pem:/app/student_private.pem:ro
       - ./student_public.pem:/app/student_public.pem:ro
       - ./instructor_public.pem:/app/instructor_public.pem:ro
